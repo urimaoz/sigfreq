@@ -1,5 +1,5 @@
 function [freqRanges, pVals, tValsSum] = ...
-    FindSignifFreqsFFT (trials, time, freqLim, smoothSpan, tTH, figures)
+    FindSignifFreqsFFT (trials, time, freqLim, smoothSpan, tTH, figures,collapseAcrossTrials)
 % function [freqRanges, pVals, tValsSum] = ...
 %     FindSignifFreqsFFT (trials, time, freqLim, smoothSpan, tTH, figures)
 % 
@@ -25,7 +25,7 @@ if (length(figures)>1), figure(figures(2)); clf; end
     % The smoothing in the function below needs to be replaced by a
     % multi-taper approach @@@ 
 [tStat,logF,logFreq,logBase,allAlpha]=...
-    Data2tStat(trials,time,freqLim,smoothSpan,length(figures)>1);
+    Data2tStat(trials,time,freqLim,smoothSpan,length(figures)>1,collapseAcrossTrials);
 
 % Run code on random 1/f^a data
 nIters=100;
@@ -56,7 +56,7 @@ parfor k=1:nIters
     end
     % Compute t statistics and chunk them, and compute d'
     [allTstatRand(k,:),~,~,~,allAlphaRnd(k,:)]=...
-        Data2tStat(trialsRnd,time,freqLim,smoothSpan,false);
+        Data2tStat(trialsRnd,time,freqLim,smoothSpan,false,collapseAcrossTrials);
     valsRnd=TStat2Chunks(allTstatRand(k,:),logFreq,tTH,...
         minHzWidth,minHzUnif,logBase);
     if (~isempty(valsRnd))
@@ -130,31 +130,55 @@ end
 
 % ============================ Subfunctions ===============================
 function [tStat, logF, logFreq, logBase, allAlpha] = ...
-    Data2tStat (trials, time, freqLim, smoothSpan, draw)
+    Data2tStat (trials, time, freqLim, smoothSpan, draw,collapseAcrossTrials)
 % Compute the t statistics over trials data
 if (~exist('draw','var')||isempty(draw)), draw=false; end
 nTrials=size(trials,1);
 if (draw)
+    if collapseAcrossTrials, nTrials = nTrials+1;end % so there's a subplot for across trials in addition to each trial
     % The screens are typically 9x16 now, so make the subplots accordingly
 %     I=floor(sqrt(nTrials)); J=ceil(sqrt(nTrials)); 
     I=ceil(sqrt(nTrials/(9*16))*9); J=floor(sqrt(nTrials/(9*16))*16); 
     while (I*J<nTrials), J=J+1; end
-    subplot(I,J,1);
+    ax1 = subplot(I,J,1);
 end
-[logF1,logFreq,alpha,logBase]=...
-    FreqPeaks(trials(1,:),time,freqLim,smoothSpan, draw);
-if (draw), title(sprintf('Tr %d, a=%0.2f',1,alpha)); axis('tight'); end
-logF=NaN(size(trials,1),length(logF1)); logF(1,:)=logF1;
-allAlpha=NaN(1,size(trials,1)); allAlpha(1)=alpha;
-for k=2:nTrials
-    if (draw), subplot(I,J,k); end
-    [logF(k,:),~,allAlpha(k)]=...
-        FreqPeaks(trials(k,:),time,freqLim,smoothSpan,draw);
-    if (draw)
-        title(sprintf('Tr %d, a=%0.2f',k,allAlpha(k))); 
-        axis('tight'); 
-        if (k==nTrials)
-            xlabel('log freq'); xlabel('log power'); 
+
+if collapseAcrossTrials
+    [logF,logFreq,allAlpha,logBase,b]=...
+        FreqPeaks(trials,time,freqLim,smoothSpan, draw,1);
+    title(sprintf('All Trials, a=%0.2f',allAlpha));
+    if draw
+        for k=nTrials-1:-1:1
+            ax(k) = subplot(I,J,k+1);
+            plot(logFreq(k,:),logF(k,:),logFreq(1,[1 end]),[0 0]);
+            title(sprintf('Tr %d',k));
+            axis('tight');
+            if (k==nTrials-1)
+                xlabel('log freq'); ylabel('log power');
+            end
+        end
+        ylims = max(arrayfun(@(x)max(abs(get(x,'ylim'))),ax));
+        arrayfun(@(x)set(x,'ylim',ylims*[-1 1]),ax);
+        figure; [~,peakInd] = max(logF,[],2); peakInd = mode(peakInd); 
+        plot(1:size(logF,1),logF(:,peakInd)','o'); xlabel('Trial Number');
+        ylabel(sprintf('Power above baseline at %0.2f Hz',logFreq(1,peakInd)^logBase))
+    end
+else
+    [logF1,logFreq,alpha,logBase]=...
+        FreqPeaks(trials(1,:),time,freqLim,smoothSpan, draw,0);
+    if (draw), title(sprintf('Tr %d, a=%0.2f',1,alpha)); axis('tight'); end
+    logF=NaN(size(trials,1),length(logF1)); logF(1,:)=logF1;
+    allAlpha=NaN(1,size(trials,1)); allAlpha(1)=alpha;
+    for k=2:nTrials
+        if (draw), subplot(I,J,k); end
+        [logF(k,:),~,allAlpha(k)]=...
+            FreqPeaks(trials(k,:),time,freqLim,smoothSpan,draw);
+        if (draw)
+            title(sprintf('Tr %d, a=%0.2f',k,allAlpha(k)));
+            axis('tight');
+            if (k==nTrials)
+                xlabel('log freq'); ylabel('log power');
+            end
         end
     end
 end
@@ -163,8 +187,8 @@ tStat=GetTStatRobust(logF);
 end
 
 % -------------------------------------------------------------------------
-function [logF, logFreq, alpha, logBase] = ...
-    FreqPeaks (f, t, fLim, span, draw)
+function [logF, logFreq, alpha, logBase,b] = ...
+    FreqPeaks (f, t, fLim, span, draw,collapseAcrossTrials)
 % function [logF, logFreq, alpha, logBase] = ...
 %     FreqPeaks (f, t, fLim, span, draw)
 % 
@@ -186,7 +210,16 @@ function [logF, logFreq, alpha, logBase] = ...
 % alpha     the 1/f^(alpha) parameter
 % logBase   the base of the logarithm
 
+if collapseAcrossTrials
+    [freq,F1]=MyFFT(f(1,:),t,[],[]);
+    F = nan(size(f,1),length(F1));
+    F(1,:) = F1;
+    for k=2:size(f,1)
+        [~,F(k,:)] = MyFFT(f(k,:),t,[],[]);
+    end
+else
 [freq,F]=MyFFT(f,t,[],[]);
+end
 if (exist('fLim','var')&&~isempty(fLim))
     % If 'fLim' is a scalar, assume it is the high cutoff of frequency
     if (length(fLim)==1), fLim=[eps,fLim]; end
@@ -217,18 +250,18 @@ if (span~=1)
     i1=find(iIncl,1,'first'); iE=find(iIncl,1,'last'); 
     iSmoothEnd=round(i1+1.1*(iE-i1+1));
     try
-        Fsm=smooth(F(1:iSmoothEnd),span,'loess')';
+        Fsm=smooth(F(:,1:iSmoothEnd),span,'loess');
     catch
-        Fsm=Smooth(F(1:iSmoothEnd),span)';
+        Fsm=Smooth(F(:,1:iSmoothEnd),span);
     end
-    Fsm=Fsm(iIncl(1:iSmoothEnd));
+    Fsm=Fsm(:,iIncl(1:iSmoothEnd));
 else
-    Fsm=F(iIncl);
+    Fsm=F(:,iIncl);
 end
 % A hack to make sure we do not get <0 Fsm, resulting in complex logs
 Fsm(Fsm<0)=min(Fsm(Fsm>0)); 
 logBase=2;
-logFreq=log(freq)/log(logBase);
+logFreq=log(freq)/log(logBase); logFreq = repmat(logFreq,size(F,1),1);
 logF=log(Fsm)/log(logBase);
 warnState=warning('off','stats:statrobustfit:IterationLimit');
     % This approach should be replaced by non-linear power fitting using
