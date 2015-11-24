@@ -59,7 +59,7 @@ if ((~isempty(pVals))&&(~any(isfinite(pVals)))), return; end
 for k=1:nIter
 %     [bsMaxT(k),~,~,~,iterLbls(:,k)]=...
     bsMaxT(k)=OneIter(conds,lbls,divergFunc,divergTh,neighborMat,...
-        neighborMatTh,nMinClustLen,nMaxGapUnify,bUnifPosNeg,bRobust,true);
+        neighborMatTh,nMinClustLen,nMaxGapUnify,bUnifPosNeg,true);
     rmi(sprintf('; Done iteration %i of %i',k,nIter));
 end
 
@@ -104,9 +104,9 @@ divergVals=permute(divergVals,[4 3 2 1]);
 % Find all clusters
 % Search for positive and negative clusters separately and then
 % unify them in the masking matrix
-tValsRows=divergVals(:);
+divergValsRows=divergVals(:);
 if (bUnifyPosNeg) % Unify positive and negative clusters
-    if (any(abs(tValsRows)>=divergTh))
+    if (any(abs(divergValsRows)>=divergTh))
         bsClustMask=...
             FindClusts3D(abs(divergVals)>=divergTh,neighbor<=neighborTh,...
             nMinClustLen,nMaxGapUnify);
@@ -114,14 +114,14 @@ if (bUnifyPosNeg) % Unify positive and negative clusters
         bsClustMask=zeros(size(divergVals));
     end
 else
-    if (any(tValsRows>=divergTh))
+    if (any(divergValsRows>=divergTh))
         bsPosClustMask=...
             FindClusts3D(divergVals>=divergTh,neighbor<=neighborTh,...
             nMinClustLen,nMaxGapUnify);
     else
         bsPosClustMask=zeros(size(divergVals));
     end
-    if (any(tValsRows<=-divergTh))
+    if (any(divergValsRows<=-divergTh))
         bsNegClustMask=...
             FindClusts3D(divergVals<=-divergTh,neighbor<=neighborTh,...
             nMinClustLen,nMaxGapUnify);
