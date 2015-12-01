@@ -4,7 +4,7 @@ function [clustMask, pVals, clustMaskSgnf, pValsSignif] = ...
 %     DiffCondsSignif (cond1, cond2, params)
 % 
 % The function computes clusters on differences between 'cond1' and 'cond2'
-% being at least 'params.tTH' apart in a t test.
+% being at least 'params.divergTh' apart in a t test.
 % Inputs:
 % (1&2) matrices of values for conditions 1 and 2, 'cond1' and 'cond2'
 % (#trials or #subjects x #channels x #timestamps (x #frequencies; 
@@ -14,7 +14,7 @@ function [clustMask, pVals, clustMaskSgnf, pValsSignif] = ...
 % function returns a higher value the more divergent cond1&2 are. The sign
 % typically indicates which of the conditions is larger, if relevant.
 % divergFunc(cond1,cond2) operates on the first dimention of cond1&2.
-% * divergTh: threshold on divergence above which a value belogs to cluster
+% * divergTh: threshold on divergence above which a value belongs to cluster
 % * d: distance matrix between channels
 % * dTh: threshold on distance matrix for channels to be neighbors 
 % * nMinClustLen: minimal cluster length allowed for initial clustering
@@ -172,7 +172,7 @@ if (isfield(params,'divergTh'))
 else
     divergTh=2; 
 end
-if (isfield(params,'neighborMat'))
+if (isfield(params,'neighborMat')) && ~isempty(params.neighborMat)
     neighborMat=params.neighborMat; 
 else
     neighborMat=ones(size(cond1,3),size(cond1,3)); 
