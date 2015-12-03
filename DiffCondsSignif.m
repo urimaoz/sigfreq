@@ -46,19 +46,19 @@ function [clustMask, pVals, clustMaskSgnf, pValsSignif] = ...
 
 n1=size(cond1,1); n2=size(cond2,1);
 conds=[cond1;cond2]; lbls=[ones(n1,1);-ones(n2,1)];
-bsMaxT=zeros(1,nIter);
+bsMaxDiverg=zeros(1,nIter);
 % Run actual data and save divergence-statistic sums over all clusters.
 % Then run bootstrapped data and calculate largest divergence-statistic sum
 % over all clusters for each bootsrap iteration.
 rmi(-1);
-[~,tSums,clustMask,pVals]=OneIter(conds,lbls,divergFunc,divergTh,...
+[~,divergSums,clustMask,pVals]=OneIter(conds,lbls,divergFunc,divergTh,...
     neighborMat,neighborMatTh,nMinClustLen,nMaxGapUnify,bUnifPosNeg,false);
 if ((~isempty(pVals))&&(~any(isfinite(pVals)))), return; end
 % iterLbls=NaN(length(lbls),nIter);
 % parfor k=1:nIter
 for k=1:nIter
-%     [bsMaxT(k),~,~,~,iterLbls(:,k)]=...
-    bsMaxT(k)=OneIter(conds,lbls,divergFunc,divergTh,neighborMat,...
+    %     [bsMaxDiv(k),~,~,~,iterLbls(:,k)]=...
+    bsMaxDiverg(k)=OneIter(conds,lbls,divergFunc,divergTh,neighborMat,...
         neighborMatTh,nMinClustLen,nMaxGapUnify,bUnifPosNeg,true);
     rmi(sprintf('; Done iteration %i of %i',k,nIter));
 end
@@ -69,9 +69,9 @@ for k=1:length(uPos), clustMask(clustMask==uPos(k))=k; end
 clustMask(~ismember(clustMask,-length(uNeg):length(uPos)))=0;
 clustMask=permute(clustMask,[3 2 1]);
 
-pVals=NaN(1,length(tSums));
-for c=1:length(tSums)
-    pVals(c)=1-sum(abs(tSums(c))>bsMaxT)/nIter;
+pVals=NaN(1,length(divergSums));
+for c=1:length(divergSums)
+    pVals(c)=1-sum(abs(divergSums(c))>bsMaxDiverg)/nIter;
 end
 
 p=[pVals(1:length(uNeg))';0;pVals(find(u>0)-1)']';
@@ -85,7 +85,7 @@ pValsSignif=pVals(pVals<pMax4signif);
 end
 
 % ============================== Subfunctions =============================
-function [bsMaxT, tSums, clustMask, pVals, iterLbls] = ...
+function [bsMaxDiverg, divergSums, clustMask, pVals, iterLbls] = ...
     OneIter (conds, lbls, divergFunc, divergTh, neighbor, neighborTh, ...
     nMinClustLen, nMaxGapUnify, bUnifyPosNeg, bBootstrap)
 % Run one iteration of either the real data (BS=false) or bootstrapping
@@ -132,24 +132,24 @@ else
 end
 
 u=unique(bsClustMask(:)); u=u(u~=0);
-tBSSums=zeros(1,length(u));
+tBsSums=zeros(1,length(u));
 for c=1:length(u)
-    tBSSums(c)=sum(divergVals(bsClustMask==u(c)));
+    tBsSums(c)=sum(divergVals(bsClustMask==u(c)));
 end
 if (bBootstrap)
     % Find the largest patch according to sum of t values
-    if (isempty(tBSSums))
-        bsMaxT=0;
+    if (isempty(tBsSums))
+        bsMaxDiverg=0;
     else
-        bsMaxT=max(abs(tBSSums));
+        bsMaxDiverg=max(abs(tBsSums));
     end
-    tSums=[]; clustMask=[]; pVals=[];
+    divergSums=[]; clustMask=[]; pVals=[];
 else
-    tSums=tBSSums;
+    divergSums=tBsSums;
     clustMask=bsClustMask;
-    bsMaxT=[];
-    if (isempty(tBSSums))
-        pVals=NaN(1,length(tSums));
+    bsMaxDiverg=[];
+    if (isempty(tBsSums))
+        pVals=NaN(1,length(divergSums));
     else
         pVals=[];
     end

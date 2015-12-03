@@ -1,6 +1,6 @@
 rng default; 
-addpath ../Replicablility_Majed/Replicable-Difference/
-addpath ../SignifFreqExtract_Emily/
+addpath ../../Replicablility_Majed/Replicable-Difference/
+addpath ../../SignifFreqExtract_Emily/
 
 alpha=-1; nSamples=1000; nTrials=50; nChannels=10;
 cond1=permute(reshape(...
