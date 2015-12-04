@@ -85,7 +85,6 @@ end
 
 [spectra,freq] = mtspectrumc(data,cp);
 
-
 %
 if parameters.plotDataAndSpectra
     if parameters.normalizeSpectra
@@ -115,16 +114,8 @@ data = transpose(data); %nTrials by nSamples
 %% Peform a robust fit of the spectra to the power function: Power(f) = c*f^(-alpha)
 
 logBase=2;
-logFreq=log(freq)/log(logBase); logFreq = repmat(logFreq,size(spectra,1),1);
-logF=log(spectra)/log(logBase);
-warnState=warning('off','stats:statrobustfit:IterationLimit');
-% This approach should be replaced by non-linear power fitting using
-% the fit() function @@@
-b=robustfit(logFreq(:),logF(:));
-warning(warnState);
+[c,alpha,logF,logFreq] = getFit(freq,spectra,logBase);
 
-c = b(1);
-alpha = -b(2);
 
 if parameters.plotFitOfSpectra
     figure;
@@ -150,22 +141,28 @@ if parameters.plotNoiseSpectra
         b = b+1;
     end
 end
-%
+%%
 for n = parameters.nNoiseIterations:-1:1
     % a. Generate nTrials of noise that matches the power spectrum found in step 3.
     nz =  ColoredNoise(alpha,nSamples,nTrials);
     noiseSpectra = mtspectrumc(nz,cp);
-    % scale the spectra to have integrals that match those of the real data
-    if parameters.normalizeSpectra
-        integrals = sum(noiseSpectra);
-        noiseSpectra = noiseSpectra./repmat(integrals,size(noiseSpectra,1),1);
-    else
-        integrals1 = sum(spectra');
-        integrals2 = sum(noiseSpectra);
-        scaleFactor = integrals1./integrals2;
-        noiseSpectra = noiseSpectra.*repmat(scaleFactor,size(noiseSpectra,1),1);
-        noiseSpectra = noiseSpectra';
-    end
+    
+    % scale the noise spectra to have power that matches the real data
+    [c2,alpha2,logF,logFreq] = getFit(freq,noiseSpectra',logBase);
+    noiseSpectra = noiseSpectra*logBase^(c-c2);
+
+    
+    
+%     if parameters.normalizeSpectra
+%         integrals = sum(noiseSpectra);
+%         noiseSpectra = noiseSpectra./repmat(integrals,size(noiseSpectra,1),1);
+%     else
+%         integrals1 = sum(spectra');
+%         integrals2 = sum(noiseSpectra);
+%         scaleFactor = integrals1./integrals2;
+%         noiseSpectra = noiseSpectra.*repmat(scaleFactor,size(noiseSpectra,1),1);
+%         noiseSpectra = noiseSpectra';
+%     end
     if parameters.plotNoiseSpectra
         ax = subplot(a,b,n,'parent',f);
         plot(freq,noiseSpectra); ch1 = get(ax,'children');
@@ -178,7 +175,7 @@ for n = parameters.nNoiseIterations:-1:1
     
     noiseSpectra = noiseSpectra'; % should now be nTrials by nFreqs
    
-    
+    %%
 %     % b. Use  the Maris & Oostenveld Method to define frequency bands in the
 %     % data that differ from the generated noise.
     [clustMask{n}, pVals{n}, clustMaskSgnf{n}, pValsSignif{n}] = ...
@@ -187,4 +184,18 @@ end
 
 %% Return the frequencies that were shown to be significant in at least softIntersectionThreshold percent of the nNoiseIterations.
 
+end
 
+function [c,alpha,logF,logFreq] = getFit(freq,spectra,logBase)
+
+logFreq=log(freq)/log(logBase); logFreq = repmat(logFreq,size(spectra,1),1);
+logF=log(spectra)/log(logBase);
+warnState=warning('off','stats:statrobustfit:IterationLimit');
+% This approach should be replaced by non-linear power fitting using
+% the fit() function @@@
+b=robustfit(logFreq(:),logF(:));
+warning(warnState);
+
+c = b(1);
+alpha = min(-b(2),2);
+end
