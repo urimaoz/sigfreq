@@ -86,7 +86,7 @@ end
 [spectra,freq] = mtspectrumc(data,cp);
 
 
-
+%
 if parameters.plotDataAndSpectra
     if parameters.normalizeSpectra
         nSubplots = 3;
@@ -99,7 +99,7 @@ if parameters.plotDataAndSpectra
 end
 
 
-%% Normalize the spectra to have identical integrals (optional)
+% Normalize the spectra to have identical integrals (optional)
 
 if parameters.normalizeSpectra
     integrals = sum(spectra);
@@ -150,13 +150,10 @@ if parameters.plotNoiseSpectra
         b = b+1;
     end
 end
-%%
+%
 for n = parameters.nNoiseIterations:-1:1
     % a. Generate nTrials of noise that matches the power spectrum found in step 3.
-    nz = nan(nSamples,nTrials);
-    for i=1:nTrials
-        nz(:,i) = PowerNoise(alpha,nSamples,'randpower','normalize');
-    end
+    nz =  ColoredNoise(alpha,nSamples,nTrials);
     noiseSpectra = mtspectrumc(nz,cp);
     % scale the spectra to have integrals that match those of the real data
     if parameters.normalizeSpectra
@@ -170,16 +167,20 @@ for n = parameters.nNoiseIterations:-1:1
         noiseSpectra = noiseSpectra';
     end
     if parameters.plotNoiseSpectra
-        subplot(a,b,n,'parent',f);figure
-        plot(freq,noiseSpectra);hold on; plot(freq,mean(noiseSpectra'),'r','linewidth',3)
-        plot(freq,mean(spectra),'c','linewidth',2);
+        ax = subplot(a,b,n,'parent',f);
+        plot(freq,noiseSpectra); ch1 = get(ax,'children');
+        hold on; plot(freq, spectra); ch2 = get(ax,'children');
+        arrayfun(@(x)set(x,'color',(rand(1))*[0 0 1]),ch2)
+        arrayfun(@(x)set(x,'color',(rand(1))*[1 0 0]),ch1)
+        plot(freq,mean(noiseSpectra,2),'r','linewidth',3)
+        plot(freq,mean(spectra),'c','linewidth',3);
     end
     
     noiseSpectra = noiseSpectra'; % should now be nTrials by nFreqs
    
     
-    % b. Use  the Maris & Oostenveld Method to define frequency bands in the
-    % data that differ from the generated noise.
+%     % b. Use  the Maris & Oostenveld Method to define frequency bands in the
+%     % data that differ from the generated noise.
     [clustMask{n}, pVals{n}, clustMaskSgnf{n}, pValsSignif{n}] = ...
         DiffCondsSignif (spectra, noiseSpectra, parameters);
 end
