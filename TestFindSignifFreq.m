@@ -1,6 +1,7 @@
 rng default; 
 addpath ../../Replicablility_Majed/Replicable-Difference/
 addpath ../../SignifFreqExtract_Emily/
+IsChronuxInpath;
 
 alpha=-1; nSamples=1000; nTrials=50; nChannels=10;
 % cond1=rand(nTrials,nChannels,nSamples);
@@ -14,7 +15,7 @@ cond2=permute(reshape(...
     [nSamples,nTrials,nChannels]),[2 3 1]); 
 
 % We want to add a bump in the 10-20 Hz range to condition 2
-sDataFile='TestDiffCondsSignifData';
+sDataFile='TestDiffCondsSignifData.mat';
 if (exist(sDataFile,'file'))
     load(sDataFile);
 else
@@ -23,24 +24,24 @@ else
     for c=1:nChannels
         for tr=1:nTrials
             x=0;
-            for k=10:.01:20
+            for k=20:.01:25
                 x=x+sin(k*2*pi*t+rand(1)*2*pi-pi);
             end
-            cond2(tr,c,:)=cond2(tr,c,:)+reshape(x,1,1,[]);
+            cond2(tr,c,:)=cond2(tr,c,:)+reshape(x,1,1,[])./28;
             rmi(sprintf('; c=%d, tr=%d',c,tr));
         end
     end
     save(sDataFile,'cond2');
 end
 
-params=struct(...
+params=createFindSigFreqsParameterStruct(1,...
+    'frequencyRange',[5 120],...
     'divergFunc',@dPrime,...
-    'divergTh',1,...
+    'divergTh',2,...
     'neighborMat',ones(nChannels,nChannels),...
     'neighborMatTh',2,...
     'nMinClustLen',0,...
     'nMaxGapUnify',5,...
-    'pMax4signif',0.05,...
     'bUnifyPosNeg',false,...
     'nIter',100);
-DiffCondsSignif(cond1,cond2,params);
+FindSignificantFrequencies(squeeze(cond2(:,1,:)),params);

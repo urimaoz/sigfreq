@@ -13,7 +13,7 @@ function [clustMask, pVals, clustMaskSgnf, pValsSignif] = ...
 % * divergFunc: Some divergence function between the conditions. The
 % function returns a higher value the more divergent cond1&2 are. The sign
 % typically indicates which of the conditions is larger, if relevant.
-% divergFunc(cond1,cond2) operates on the first dimention of cond1&2.
+% * divergFunc(cond1,cond2) operates on the first dimention of cond1&2.
 % * divergTh: threshold on divergence above which a value belongs to cluster
 % * d: distance matrix between channels
 % * dTh: threshold on distance matrix for channels to be neighbors 
