@@ -3,7 +3,7 @@ addpath ../../Replicablility_Majed/Replicable-Difference/
 addpath ../../SignifFreqExtract_Emily/
 IsChronuxInpath;
 
-alpha=-1; nSamples=1000; nTrials=50; nChannels=10;
+alpha=-1; nSamples=1000; nTrials=50; nChannels=1;
 % cond1=rand(nTrials,nChannels,nSamples);
 % cond2=rand(nTrials,nChannels,nSamples);
 % cond2(:,:,450:550)=cond2(:,:,450:550)+2;

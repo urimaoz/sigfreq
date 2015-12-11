@@ -177,9 +177,11 @@ for n = parameters.nNoiseIterations:-1:1
 %     % data that differ from the generated noise.
 % DiffCondsSignif() expects (#trials x #channels x #timestamps (x
 % #frequencies  <optional>). So make 'spectra' 3D with #channels=1
-    spectra=repmat(spectra,1,1,1);
+    spectra3D=reshape(spectra,size(spectra,1),1,size(spectra,2));
+    noiseSpectra3D=reshape(noiseSpectra,...
+        size(noiseSpectra,1),1,size(noiseSpectra,2));
     [clustMask{n}, pVals{n}, clustMaskSgnf{n}, pValsSignif{n}] = ...
-        DiffCondsSignif (spectra, noiseSpectra, parameters);
+        DiffCondsSignif (spectra3D, noiseSpectra3D, parameters);
 end
 
 %% Return the frequencies that were shown to be significant in at least softIntersectionThreshold percent of the nNoiseIterations.
@@ -189,11 +191,11 @@ function [c,alpha,logF,logFreq] = getFit(freq,spectra,logBase)
 
 logFreq=log(freq)/log(logBase); logFreq = repmat(logFreq,size(spectra,1),1);
 logF=log(spectra)/log(logBase);
-warnState=warning('off','stats:statrobustfit:IterationLimit');
+% % warnState=warning('off','stats:statrobustfit:IterationLimit');
 % This approach should be replaced by non-linear power fitting using
 % the fit() function @@@
 b=robustfit(logFreq(:),logF(:));
-warning(warnState);
+% % warning(warnState);
 
 c = b(1);
 alpha = min(-b(2),2);

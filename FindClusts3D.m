@@ -28,46 +28,48 @@ for k=1:nCh
 end
 maxChClusts=max(C(:));
 
-% Connect clusters across the third dimension according to the adjacency
-% matrix 'D'
-iElClusts=find(sum(squeeze(C),1)>0);
-Mconn=cell(nCh,maxChClusts);
-% Run only on electrodes that contain clusters
-for i=iElClusts
-    % Connect only clusters of neighboring electrodes
-    iNeighbor=find(D(i,:)); iNeighbor=iNeighbor(iNeighbor~=i);
-    iNeighbor=iNeighbor(ismember(iNeighbor,iElClusts));
-    for j=iNeighbor
-        % Intersections between clusters across the 3rd dimension
-        [iConn,jConn]=find(C(:,:,i)&C(:,:,j));
-        clustFrom=C(sub2ind(size(C),iConn,jConn,repmat(i,size(iConn)))); 
-        clustTo=C(sub2ind(size(C),iConn,jConn,repmat(j,size(iConn)))); 
-            % If clusters have multiple intersections, save only the first
-        c=clustFrom+1i*clustTo; c=unique(c); 
-        clustFrom=real(c); clustTo=imag(c);
-        for k=1:length(clustFrom)
-            Mconn{i,clustFrom(k)}=[Mconn{i,clustFrom(k)};[j,clustTo(k)]];
-        end
-    end
-end
-
 iNewClust=1;
 nDim=size(C,1)*size(C,2);
-% for chFrom=1:size(Mconn,1)
-%  Run only on electrodes with clusters connecting to other electrodes
-floodDone=false; 
-if (~isempty(Mconn))
-    for chFrom=find(~cellfun(@isempty,Mconn(:,1)))'
-        for clustFrom=1:clusts{chFrom}.NumObjects
-            if (C((chFrom-1)*nDim+...
-                    clusts{chFrom}.PixelIdxList{clustFrom})>0)
-                FloodClust(chFrom,clustFrom,iNewClust);
-                iNewClust=iNewClust+1; 
+if (nCh>1)
+    % Connect clusters across the third dimension according to the adjacency
+    % matrix 'D'
+    iElClusts=find(sum(squeeze(C),1)>0);
+    Mconn=cell(nCh,maxChClusts);
+    % Run only on electrodes that contain clusters
+    for i=iElClusts
+        % Connect only clusters of neighboring electrodes
+        iNeighbor=find(D(i,:)); iNeighbor=iNeighbor(iNeighbor~=i);
+        iNeighbor=iNeighbor(ismember(iNeighbor,iElClusts));
+        for j=iNeighbor
+            % Intersections between clusters across the 3rd dimension
+            [iConn,jConn]=find(C(:,:,i)&C(:,:,j));
+            clustFrom=C(sub2ind(size(C),iConn,jConn,repmat(i,size(iConn))));
+            clustTo=C(sub2ind(size(C),iConn,jConn,repmat(j,size(iConn))));
+            % If clusters have multiple intersections, save only the first
+            c=clustFrom+1i*clustTo; c=unique(c);
+            clustFrom=real(c); clustTo=imag(c);
+            for k=1:length(clustFrom)
+                Mconn{i,clustFrom(k)}=[Mconn{i,clustFrom(k)};[j,clustTo(k)]];
             end
-            floodDone=(max(C(:))==0); % True when all clusters were flooded
-            if (floodDone), break; end
         end
-        if (~isempty(clustFrom)&&floodDone), break; end
+    end
+    
+    % for chFrom=1:size(Mconn,1)
+    %  Run only on electrodes with clusters connecting to other electrodes
+    floodDone=false;
+    if (~isempty(Mconn))
+        for chFrom=find(~cellfun(@isempty,Mconn(:,1)))'
+            for clustFrom=1:clusts{chFrom}.NumObjects
+                if (C((chFrom-1)*nDim+...
+                        clusts{chFrom}.PixelIdxList{clustFrom})>0)
+                    FloodClust(chFrom,clustFrom,iNewClust);
+                    iNewClust=iNewClust+1;
+                end
+                floodDone=(max(C(:))==0); % True when all clusters were flooded
+                if (floodDone), break; end
+            end
+            if (~isempty(clustFrom)&&floodDone), break; end
+        end
     end
 end
 

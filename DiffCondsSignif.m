@@ -27,10 +27,11 @@ function [clustMask, pVals, clustMaskSgnf, pValsSignif] = ...
 % The function returns a mask the size of the second and onward dimensions
 % of cond1 (or cond2; the first dimension is the one compared in divergFunc 
 % and hence lost). The values in 'clustMask' are k for cluster #k
-% (negative for clusters with t values < 0; 0 for no cluster). 'pVals' are
-% the pValues of all the clusters according to the bootstrapping
-% distribution. 'clustMaskSgnf' and 'pValsSignif' are only the significant
-% clusters and p values, as defined 
+% (negative for clusters with divergence values < 0; 0 for no cluster).
+% 'pVals' are the pValues of all the clusters according to the
+% bootstrapping distribution. 'clustMaskSgnf' and 'pValsSignif' are only
+% the significant clusters and p values, as defined by the 'pMax4signif'
+% field of the 'params' structure.
 % 
 % This is an offshoot of Maris & Oostenveld (J Neurosci Meth 2007). The
 % code is meant to overcome the multiple-comparison problem -- e.g., how to
@@ -39,7 +40,8 @@ function [clustMask, pVals, clustMaskSgnf, pValsSignif] = ...
 % 
 % Uri Maoz, Caltech, Created 9/17/2014. Modified and improved since.
 % Uri Maoz, UCLA, Caltech: Significant modification, 11/16/2015: made the
-% function general, accepts any divergence function.
+% function general, accepts any divergence function that takes in 2
+% conditions and returns one output, the divergence measure.
 
 [divergFunc,divergTh,neighborMat,neighborMatTh,nMinClustLen,nMaxGapUnify,...
     pMax4signif,bUnifPosNeg,nIter]=GetParams(params,cond1);
