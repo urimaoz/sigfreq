@@ -145,6 +145,10 @@ end
 for n = parameters.nNoiseIterations:-1:1
     % a. Generate nTrials of noise that matches the power spectrum found in step 3.
     nz =  ColoredNoise(alpha,nSamples,nTrials) * logBase^c;
+    nzAmps = sum(abs(nz));
+    dataAmps = sum(abs(data'));
+    scaleFactor = repmat(dataAmps./nzAmps,nSamples,1);
+    nz = nz.*scaleFactor;
     noiseSpectra = mtspectrumc(nz,cp);
     
     % scale the noise spectra to have power that matches the real data
@@ -185,6 +189,10 @@ for n = parameters.nNoiseIterations:-1:1
 end
 
 %% Return the frequencies that were shown to be significant in at least softIntersectionThreshold percent of the nNoiseIterations.
+sigClusts = cell2mat(clustMaskSgnf');
+sigClusts = sum(sigClusts~=0)/parameters.nNoiseIterations>parameters.softIntersectionThreshold;
+freqBands = freq(continuousRunsOfTrue(sigClusts));
+freqBands(freqBands(:,1)==freqBands(:,2),:)=[];
 end
 
 function [c,alpha,logF,logFreq] = getFit(freq,spectra,logBase)
