@@ -154,16 +154,10 @@ for n = parameters.nNoiseIterations:-1:1
     % scale the noise spectra to have power that matches the real data
     [c2,alpha2,logF,logFreq] = getFit(freq,noiseSpectra',logBase);
     noiseSpectra = noiseSpectra*logBase^(c-c2);
-%     if parameters.normalizeSpectra
-%         integrals = sum(noiseSpectra);
-%         noiseSpectra = noiseSpectra./repmat(integrals,size(noiseSpectra,1),1);
-%     else
-%         integrals1 = sum(spectra');
-%         integrals2 = sum(noiseSpectra);
-%         scaleFactor = integrals1./integrals2;
-%         noiseSpectra = noiseSpectra.*repmat(scaleFactor,size(noiseSpectra,1),1);
-%         noiseSpectra = noiseSpectra';
-%     end
+    if parameters.normalizeSpectra
+        integrals = sum(noiseSpectra);
+        noiseSpectra = noiseSpectra./repmat(integrals,size(noiseSpectra,1),1);
+    end
     if parameters.plotNoiseSpectra
         ax = subplot(a,b,n,'parent',f);
         plot(freq,noiseSpectra); ch1 = get(ax,'children');
