@@ -74,16 +74,16 @@ data = transpose(data);
 
 
 % create a chronux parameters structure, cp
-cp = struct('tapers',parameters.tapers,'Fs',parameters.samplingFrequency,...
+chronuxParams = struct('tapers',parameters.tapers,'Fs',parameters.samplingFrequency,...
     'fpass',parameters.frequencyRange,'trialave',0);
 
 if parameters.removeLineNoise
     T = parameters.tapers(2);
-    data=rmlinesmovingwinc(data,[T T/2],10,cp,[],...
+    data=rmlinesmovingwinc(data,[T T/2],10,chronuxParams,[],...
         parameters.plotLineNoiseRemoval,parameters.lineNoiseFrequencies);
 end
 
-[spectra,freq] = mtspectrumc(data,cp);
+[spectra,freq] = mtspectrumc(data,chronuxParams);
 
 %
 if parameters.plotDataAndSpectra
@@ -135,70 +135,80 @@ end
 
 %% For nNoiseIterations
 if parameters.plotNoiseSpectra
-    f = figure; a = floor(sqrt(parameters.nNoiseIterations));
+    a = floor(sqrt(parameters.nNoiseIterations));
     b = ceil(sqrt(parameters.nNoiseIterations));
     while a*b<parameters.nNoiseIterations
         b = b+1;
     end
+else
+    a = []; b = [];
 end
 %%
-for n = parameters.nNoiseIterations:-1:1
-    % a. Generate nTrials of noise that matches the power spectrum found in step 3.
-    nz =  ColoredNoise(alpha,nSamples,nTrials) * logBase^c;
-    nzAmps = sum(abs(nz));
-    dataAmps = sum(abs(data'));
-    scaleFactor = repmat(dataAmps./nzAmps,nSamples,1);
-    nz = nz.*scaleFactor;
-    noiseSpectra = mtspectrumc(nz,cp);
-    
-    % scale the noise spectra to have power that matches the real data
-    [c2,alpha2,logF,logFreq] = getFit(freq,noiseSpectra',logBase);
-    noiseSpectra = noiseSpectra*logBase^(c-c2);
-    if parameters.normalizeSpectra
-        integrals = sum(noiseSpectra);
-        noiseSpectra = noiseSpectra./repmat(integrals,size(noiseSpectra,1),1);
+freqBands = getFreqBandsFromData(data,parameters,a,b,c,chronuxParams);
+
+    function freqBands = getFreqBandsFromData(data,parameters,a,b,c,cp)
+        if parameters.plotNoiseSpectra
+            f = figure;
+        end
+        for n = parameters.nNoiseIterations:-1:1
+            % a. Generate nTrials of noise that matches the power spectrum found in step 3.
+            nz =  ColoredNoise(alpha,nSamples,nTrials) * logBase^c;
+            nzAmps = sum(abs(nz));
+            dataAmps = sum(abs(data'));
+            scaleFactor = repmat(dataAmps./nzAmps,nSamples,1);
+            nz = nz.*scaleFactor;
+            noiseSpectra = mtspectrumc(nz,cp);
+            
+            % scale the noise spectra to have power that matches the real data
+            [c2,alpha2,logF,logFreq] = getFit(freq,noiseSpectra',logBase);
+            noiseSpectra = noiseSpectra*logBase^(c-c2);
+            if parameters.normalizeSpectra
+                integrals = sum(noiseSpectra);
+                noiseSpectra = noiseSpectra./repmat(integrals,size(noiseSpectra,1),1);
+            end
+            if parameters.plotNoiseSpectra
+                ax = subplot(a,b,n,'parent',f);
+                plot(freq,noiseSpectra); ch1 = get(ax,'children');
+                hold on; plot(freq, spectra); ch2 = get(ax,'children');
+                arrayfun(@(x)set(x,'color',(rand(1))*[0 0 1]),ch2)
+                arrayfun(@(x)set(x,'color',(rand(1))*[1 0 0]),ch1)
+                plot(freq,mean(noiseSpectra,2),'r','linewidth',3)
+                plot(freq,mean(spectra),'c','linewidth',3);
+            end
+            
+            noiseSpectra = noiseSpectra'; % should now be nTrials by nFreqs
+            
+            %%
+            %     % b. Use  the Maris & Oostenveld Method to define frequency bands in the
+            %     % data that differ from the generated noise.
+            % DiffCondsSignif() expects (#trials x #channels x #timestamps (x
+            % #frequencies  <optional>). So make 'spectra' 3D with #channels=1
+            spectra3D=reshape(spectra,size(spectra,1),1,size(spectra,2));
+            noiseSpectra3D=reshape(noiseSpectra,...
+                size(noiseSpectra,1),1,size(noiseSpectra,2));
+            [clustMask{n}, pVals{n}, clustMaskSgnf{n}, pValsSignif{n}] = ...
+                DiffCondsSignif (spectra3D, noiseSpectra3D, parameters);
+        end
+        
+        %% Return the frequencies that were shown to be significant in at least softIntersectionThreshold percent of the nNoiseIterations.
+        sigClusts = cell2mat(clustMaskSgnf');
+        sigClusts = sum(sigClusts~=0)/parameters.nNoiseIterations>parameters.softIntersectionThreshold;
+        freqBands = freq(continuousRunsOfTrue(sigClusts));
+        freqBands(freqBands(:,1)==freqBands(:,2),:)=[];
+        
     end
-    if parameters.plotNoiseSpectra
-        ax = subplot(a,b,n,'parent',f);
-        plot(freq,noiseSpectra); ch1 = get(ax,'children');
-        hold on; plot(freq, spectra); ch2 = get(ax,'children');
-        arrayfun(@(x)set(x,'color',(rand(1))*[0 0 1]),ch2)
-        arrayfun(@(x)set(x,'color',(rand(1))*[1 0 0]),ch1)
-        plot(freq,mean(noiseSpectra,2),'r','linewidth',3)
-        plot(freq,mean(spectra),'c','linewidth',3);
+
+    function [c,alpha,logF,logFreq] = getFit(freq,spectra,logBase)
+        
+        logFreq=log(freq)/log(logBase); logFreq = repmat(logFreq,size(spectra,1),1);
+        logF=log(spectra)/log(logBase);
+        % % warnState=warning('off','stats:statrobustfit:IterationLimit');
+        % This approach should be replaced by non-linear power fitting using
+        % the fit() function @@@
+        b=robustfit(logFreq(:),logF(:));
+        % % warning(warnState);
+        
+        c = b(1);
+        alpha = min(-b(2),2);
     end
-    
-    noiseSpectra = noiseSpectra'; % should now be nTrials by nFreqs
-   
-    %%
-%     % b. Use  the Maris & Oostenveld Method to define frequency bands in the
-%     % data that differ from the generated noise.
-% DiffCondsSignif() expects (#trials x #channels x #timestamps (x
-% #frequencies  <optional>). So make 'spectra' 3D with #channels=1
-    spectra3D=reshape(spectra,size(spectra,1),1,size(spectra,2));
-    noiseSpectra3D=reshape(noiseSpectra,...
-        size(noiseSpectra,1),1,size(noiseSpectra,2));
-    [clustMask{n}, pVals{n}, clustMaskSgnf{n}, pValsSignif{n}] = ...
-        DiffCondsSignif (spectra3D, noiseSpectra3D, parameters);
-end
-
-%% Return the frequencies that were shown to be significant in at least softIntersectionThreshold percent of the nNoiseIterations.
-sigClusts = cell2mat(clustMaskSgnf');
-sigClusts = sum(sigClusts~=0)/parameters.nNoiseIterations>parameters.softIntersectionThreshold;
-freqBands = freq(continuousRunsOfTrue(sigClusts));
-freqBands(freqBands(:,1)==freqBands(:,2),:)=[];
-end
-
-function [c,alpha,logF,logFreq] = getFit(freq,spectra,logBase)
-
-logFreq=log(freq)/log(logBase); logFreq = repmat(logFreq,size(spectra,1),1);
-logF=log(spectra)/log(logBase);
-% % warnState=warning('off','stats:statrobustfit:IterationLimit');
-% This approach should be replaced by non-linear power fitting using
-% the fit() function @@@
-b=robustfit(logFreq(:),logF(:));
-% % warning(warnState);
-
-c = b(1);
-alpha = min(-b(2),2);
 end
