@@ -1,13 +1,18 @@
-function parameters = createFindSigFreqsParameterStruct(useDefaults,varargin)
-% SYNTAX: parameters = setUpFieldParameters(useDefaults,varargin)
+function parameters = createFindSigFreqsParameterStruct ...
+    (useDefaults, varargin)
+% function parameters = createFindSigFreqsParameterStruct ...
+%     (useDefaults, varargin)
+% 
 % This function creates a parameter struct that is used throughout the
 % locating place field code. If this function is called without input
 % arguments, it will interactively ask questions of the user and set
 % parameters appropriately. If default values are generally acceptable to
 % the user, however, useDefaults can be entered as true, and then any value
 % that should be overwritten may be passed in as a parameter-value pair.
-% For example, to change only the frequency range and samplingFrequency, you could enter
-% p = createFindSigFreqsParameterStruct(1,'frequencyRange',[10,30],'samplingFrequency',2000);
+% For example, to change only the frequency range and samplingFrequency,
+% you could enter: 
+% p = createFindSigFreqsParameterStruct(1,'frequencyRange',[10,30],
+%   'samplingFrequency',2000); 
 
 
 % * Parameters may be passed in as a structure, or if omitted or left
@@ -59,8 +64,10 @@ p.neighborMatTh = .5; % What is the threshold on the distance function to count 
 p.nMinClustLen = 10; % What is the minimum number of continguous points of significance to count as a cluster worth examining?
 p.nMaxGapUnify = round(p.nMinClustLen/3); % At what point is the gap between two clusters small enough that they should be combined into a single cluster?
 p.Max4signif = 0.5; % I don't actually know what this is for. I'd suggest using the default. But let's ask Uri!
-p.bUnifyPosNeg = 0; % If two clusters are adjacent and significant but have differing signs on their divergence function, should they be joined?
+p.bUnifyPosNeg = false; % If two clusters are adjacent and significant but have differing signs on their divergence function, should they be joined?
 p.nIter = 1000; % How many iterations of bootstrapping should be performed to identify significant clusters?
+p.bNonlinearRegression = true; % Use non-linear regression for the fit (true) or linear regression in log space (false), i.e., log-log fitting
+p.nSmoothingSpan = 0.1; % Smoothing span for the spectrum. If < 1 signifies ratio of data to use, if >1 signifies #samples to use
 
 p.plotDataAndSpectra = 1;
 p.plotFitOfSpectra = 1;
@@ -92,15 +99,19 @@ if nargin==0||~useDefaults
     p = updateP(p,'Max4signif','I don''t actually know what this is for. I''d suggest using the default. But let''s ask Uri!');
     p = updateP(p,'bUnifyPosNeg','If two clusters are adjacent and significant but have differing signs on their divergence function, should they be joined?');
     p = updateP(p,'nIter','How many iterations of bootstrapping should be performed to identify significant clusters?');
+    p = updateP(p,'bNonlinearRegression ','Use nonlinear regression (true) or linear regression in log space (false) to calculate alpha for 1/(f^alpha)?');
+    p = updateP(p,'nSmoothingSpan ','What smoothing span to use for spectrum? Value < 1 signifies ratio of data to use, >1 signifies #samples to use');
 end
 
 p = parseParameters(p,varargin{:});
 parameters = p;
 
+% ========================== Local subfunctions ===========================
 function p = updateP(p,field,question,assertionFunction)
+% Ask user to update field 
 disp(field)
 spaces = regexp(question,'\s');
-cutoffs = [0 spaces(find(diff(ceil(spaces/75)))) length(question)];
+cutoffs = [0 spaces(logical(diff(ceil(spaces/75)))) length(question)];
 for i=1:length(cutoffs)-1
     disp(['     ',question(cutoffs(i)+1:cutoffs(i+1))])
 end
@@ -122,6 +133,7 @@ if ~isempty(answer) && exist('assertionFunction','var')&&~isempty(assertionFunct
     end
 end
 
+% ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 function p = parseParameters(p,varargin)
 % SYNTAX: p = parseParameters(p,varargin)
 % Takes a struct, p, with default values and overwrites any values that are

@@ -77,7 +77,7 @@ data = transpose(data);
 chronuxParams = struct('tapers',parameters.tapers,'Fs',parameters.samplingFrequency,...
     'fpass',parameters.frequencyRange,'trialave',0);
 
-if parameters.removeLineNoise
+if (parameters.removeLineNoise)
     T = parameters.tapers(2);
     data=rmlinesmovingwinc(data,[T T/2],10,chronuxParams,[],...
         parameters.plotLineNoiseRemoval,parameters.lineNoiseFrequencies);
@@ -86,13 +86,17 @@ end
 [spectra,freq] = mtspectrumc(data,chronuxParams);
 
 %
-if parameters.plotDataAndSpectra
-    if parameters.normalizeSpectra
+if (parameters.plotDataAndSpectra)
+    if (parameters.normalizeSpectra)
         nSubplots = 3;
     else
         nSubplots = 2;
     end
-    figure('units','normalized','position',[.3,.55,.35,.25]);
+    if (strcmpi(get(0,'DefaultFigureWindowStyle'),'normal'))
+        figure('units','normalized','position',[.3,.55,.35,.25]);
+    else
+        figure('units','normalized');
+    end
     subplot(1,nSubplots,1); plot(data); axis square; title('Data per trial')
     subplot(1,nSubplots,2); plot(freq,spectra); axis square; title('Spectrum per trial')
 end
@@ -100,7 +104,7 @@ end
 
 % Normalize the spectra to have identical integrals (optional)
 
-if parameters.normalizeSpectra
+if (parameters.normalizeSpectra)
     integrals = sum(spectra);
     spectra = spectra./repmat(integrals,size(spectra,1),1);
     if parameters.plotDataAndSpectra
@@ -114,30 +118,40 @@ data = transpose(data); %nTrials by nSamples
 %% Peform a robust fit of the spectra to the power function: Power(f) = c*f^(-alpha)
 
 logBase=2;
-[c,alpha,logF,logFreq] = getFit(freq,spectra,logBase);
+    [c,alpha,logF,logFreq] = getFit(freq,spectra,logBase,...
+        parameters.bNonlinearRegression);
 
 
-if parameters.plotFitOfSpectra
+if (parameters.plotFitOfSpectra)
     figure;
-    nSubplots = 2;
-    subplot(1,nSubplots,1); plot(logFreq',logF'); axis square; title('Log-Log Spectra with Best Fit')
-    hold on; plot(logFreq(1,:),mean(logF),'r','linewidth',3);
-    plot(logFreq(1,[1 end]),c+logFreq(1,[1 end])*(-alpha),'k','linewidth',3);
-    xlabel('Log Frequency'); ylabel('Log Power')
+    if (~parameters.bNonlinearRegression)
+        nSubplots = 2;
+        subplot(1,nSubplots,1);
+        plot(logFreq',logF'); axis square; title('Log-Log Spectra with Best Fit')
+        hold on; plot(logFreq(1,:),mean(logF),'r','linewidth',3);
+        plot(logFreq(1,[1 end]),c+logFreq(1,[1 end])*(-alpha),'k','linewidth',3);
+        xlabel('Log Frequency'); ylabel('Log Power')
+
+        subplot(1,nSubplots,2); 
+    end
     
-    subplot(1,nSubplots,2); plot(freq,spectra); axis square; title('Spectra with Best Fit')
+    plot(freq,spectra); axis square; title('Spectra with Best Fit')
     hold on; plot(freq,mean(spectra),'r','linewidth',3);
-    plot(freq,(logBase^c)*freq.^(-alpha),'k','linewidth',3);
+    if (parameters.bNonlinearRegression)
+        plot(freq,c*freq.^(-alpha),'k','linewidth',3);
+    else
+        plot(freq,(logBase^c)*freq.^(-alpha),'k','linewidth',3);
+    end
     xlabel('Frequency'); ylabel('Power')
 end
 
 
 
 %% For nNoiseIterations
-if parameters.plotNoiseSpectra
+if (parameters.plotNoiseSpectra)
     a = floor(sqrt(parameters.nNoiseIterations));
     b = ceil(sqrt(parameters.nNoiseIterations));
-    while a*b<parameters.nNoiseIterations
+    while (a*b<parameters.nNoiseIterations)
         b = b+1;
     end
 else
@@ -146,8 +160,9 @@ end
 %%
 freqBands = getFreqBandsFromData(data,parameters,a,b,c,chronuxParams);
 
+    %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     function freqBands = getFreqBandsFromData(data,parameters,a,b,c,cp)
-        if parameters.plotNoiseSpectra
+        if (parameters.plotNoiseSpectra)
             f = figure;
         end
         for n = parameters.nNoiseIterations:-1:1
@@ -160,13 +175,14 @@ freqBands = getFreqBandsFromData(data,parameters,a,b,c,chronuxParams);
             noiseSpectra = mtspectrumc(nz,cp);
             
             % scale the noise spectra to have power that matches the real data
-            [c2,alpha2,logF,logFreq] = getFit(freq,noiseSpectra',logBase);
+            [c2,~,logF,logFreq] = getFit(freq,noiseSpectra',logBase,...
+                parameters.bNonlinearRegression);
             noiseSpectra = noiseSpectra*logBase^(c-c2);
-            if parameters.normalizeSpectra
+            if (parameters.normalizeSpectra)
                 integrals = sum(noiseSpectra);
                 noiseSpectra = noiseSpectra./repmat(integrals,size(noiseSpectra,1),1);
             end
-            if parameters.plotNoiseSpectra
+            if (parameters.plotNoiseSpectra)
                 ax = subplot(a,b,n,'parent',f);
                 plot(freq,noiseSpectra); ch1 = get(ax,'children');
                 hold on; plot(freq, spectra); ch2 = get(ax,'children');
@@ -186,7 +202,7 @@ freqBands = getFreqBandsFromData(data,parameters,a,b,c,chronuxParams);
             spectra3D=reshape(spectra,size(spectra,1),1,size(spectra,2));
             noiseSpectra3D=reshape(noiseSpectra,...
                 size(noiseSpectra,1),1,size(noiseSpectra,2));
-            [clustMask{n}, pVals{n}, clustMaskSgnf{n}, pValsSignif{n}] = ...
+            [~, ~, clustMaskSgnf{n}, ~] = ...
                 DiffCondsSignif (spectra3D, noiseSpectra3D, parameters);
         end
         
@@ -198,17 +214,26 @@ freqBands = getFreqBandsFromData(data,parameters,a,b,c,chronuxParams);
         
     end
 
-    function [c,alpha,logF,logFreq] = getFit(freq,spectra,logBase)
+    %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    function [c,alpha,logF,logFreq] = getFit(freq,spectra,logBase,...
+            bNonlinearFit)
         
-        logFreq=log(freq)/log(logBase); logFreq = repmat(logFreq,size(spectra,1),1);
-        logF=log(spectra)/log(logBase);
-        % % warnState=warning('off','stats:statrobustfit:IterationLimit');
-        % This approach should be replaced by non-linear power fitting using
-        % the fit() function @@@
-        b=robustfit(logFreq(:),logF(:));
-        % % warning(warnState);
-        
-        c = b(1);
-        alpha = min(-b(2),2);
+        if (bNonlinearFit)
+            options=fitoptions('power1','Robust','On');
+            freq=repmat(freq,size(spectra,1),1);
+            fitObj=fit(freq(:),spectra(:),'power1',options);
+            c = fitObj.a;
+            alpha = min(-fitObj.b,2);
+            logFreq=[]; logF=[]; 
+        else
+            logFreq=log(freq)/log(logBase); logFreq = repmat(logFreq,size(spectra,1),1);
+            logF=log(spectra)/log(logBase);
+            % % warnState=warning('off','stats:statrobustfit:IterationLimit');
+            b=robustfit(logFreq(:),logF(:));
+            % % warning(warnState);
+            
+            c = b(1);
+            alpha = min(-b(2),2);
+        end
     end
 end
