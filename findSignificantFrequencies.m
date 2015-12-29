@@ -73,7 +73,7 @@ end
 data = transpose(data);
 
 
-% create a chronux parameters structure, cp
+% create a chronux parameters structure, chronuxParams
 chronuxParams = struct('tapers',parameters.tapers,'Fs',parameters.samplingFrequency,...
     'fpass',parameters.frequencyRange,'trialave',0);
 
@@ -103,7 +103,6 @@ end
 
 
 % Normalize the spectra to have identical integrals (optional)
-
 if (parameters.normalizeSpectra)
     integrals = sum(spectra);
     spectra = spectra./repmat(integrals,size(spectra,1),1);
@@ -118,8 +117,8 @@ data = transpose(data); %nTrials by nSamples
 %% Peform a robust fit of the spectra to the power function: Power(f) = c*f^(-alpha)
 
 logBase=2;
-    [c,alpha,logF,logFreq] = getFit(freq,spectra,logBase,...
-        parameters.bNonlinearRegression);
+[c,alpha,logF,logFreq] = getFit(freq,spectra,logBase,...
+    parameters.bNonlinearRegression);
 
 
 if (parameters.plotFitOfSpectra)
@@ -131,8 +130,8 @@ if (parameters.plotFitOfSpectra)
         hold on; plot(logFreq(1,:),mean(logF),'r','linewidth',3);
         plot(logFreq(1,[1 end]),c+logFreq(1,[1 end])*(-alpha),'k','linewidth',3);
         xlabel('Log Frequency'); ylabel('Log Power')
-
-        subplot(1,nSubplots,2); 
+        
+        subplot(1,nSubplots,2);
     end
     
     plot(freq,spectra); axis square; title('Spectra with Best Fit')
@@ -145,9 +144,7 @@ if (parameters.plotFitOfSpectra)
     xlabel('Frequency'); ylabel('Power')
 end
 
-
-
-%% For nNoiseIterations
+% Get subplot dimensions
 if (parameters.plotNoiseSpectra)
     a = floor(sqrt(parameters.nNoiseIterations));
     b = ceil(sqrt(parameters.nNoiseIterations));
@@ -157,11 +154,72 @@ if (parameters.plotNoiseSpectra)
 else
     a = []; b = [];
 end
-%%
-freqBands = getFreqBandsFromData(data,parameters,a,b,c,chronuxParams);
 
-    %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    function freqBands = getFreqBandsFromData(data,parameters,a,b,c,cp)
+%% Iteratively Choose a Subset of Data on which to Test For Significant Bands
+
+if parameters.topPercentile == 100
+    % If using all data, no need to do this iteratively. Run once and stop
+    freqBands = getFreqBandsFromData(data,spectra,parameters,a,b,c,chronuxParams);
+    keepGoing = 0;
+else
+    keepGoing = 1;
+    freqBands = [];
+    runAtleastOnce = 0;
+    bestLogFitLine = c+logFreq(1,:)*(-alpha);
+    meanLogSpectra = mean(logF);
+    deviationBetween = meanLogSpectra - bestLogFitLine;
+end
+
+while keepGoing
+    % Find the frequency where the mean deviation from the best-fit line is
+    % maximal (currently, not in absolute value, since we're only looking
+    % for positive bumps)
+    
+    [m,i] = nanmax(deviationBetween);
+    
+    
+    % if we are at a point where the maximal devation between the untested
+    % mean spectra and the best fit line is less than zero, then all bumps
+    % have been tested already. Stop.
+    if  m<0
+        keepGoing = 0;
+    else
+        % for each trial, consider the value of that trial's spectrum at
+        % the frequency that most deviates from the mean. Take the trials
+        % that represent the top X% of these values, where X is defined by
+        % parameters.topPercentile
+        thisThreshold = prctile(spectra(:,i),100-parameters.topPercentile);
+        trialsToKeep = spectra(:,i)>=thisThreshold;
+        theseData = data(trialsToKeep,:);
+        theseSpectra = spectra(trialsToKeep,:);
+        theseFreqBands = getFreqBandsFromData(theseData,theseSpectra,parameters,a,b,c,chronuxParams);
+        freqBands = [freqBands;theseFreqBands];
+        runAtleastOnce = 1;
+        sigInds = false(size(freq));
+        for tfb = 1:size(theseFreqBands)
+            sigInds(freq>=theseFreqBands(tfb,1) & freq<=theseFreqBands(tfb,2)) = 1;
+        end
+        if ~sigInds(i)
+            %then the pre-determined likeliest to be significant frequency
+            %isn't significant, so stop;
+            keepGoing = 0;
+        else
+            % eliminate the already significant frequency bands from
+            % consideration for possible best frequency range and then
+            % continue
+            deviationBetween(sigInds) = NaN;
+        end
+        
+    end
+end
+
+freqBands = unifyFreqBands(freqBands);
+
+
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    function freqBands = getFreqBandsFromData(data,spectra,parameters,a,b,c,cp)
+        [nTrials,nSamples] = size(data);
         if (parameters.plotNoiseSpectra)
             f = figure;
         end
@@ -208,15 +266,21 @@ freqBands = getFreqBandsFromData(data,parameters,a,b,c,chronuxParams);
         
         %% Return the frequencies that were shown to be significant in at least softIntersectionThreshold percent of the nNoiseIterations.
         sigClusts = cell2mat(clustMaskSgnf');
-        sigClusts = sum(sigClusts~=0)/parameters.nNoiseIterations>parameters.softIntersectionThreshold;
+        %         sigClusts = sum(sigClusts~=0)/parameters.nNoiseIterations>parameters.softIntersectionThreshold;
+        % changed to >0 because for now we are insisting on positive bumps.
+        sigClusts = sum(sigClusts>0)/parameters.nNoiseIterations>parameters.softIntersectionThreshold;
         freqBands = freq(continuousRunsOfTrue(sigClusts));
         freqBands(freqBands(:,1)==freqBands(:,2),:)=[];
         
     end
 
-    %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     function [c,alpha,logF,logFreq] = getFit(freq,spectra,logBase,...
             bNonlinearFit)
+        
+        logFreq=log(freq)/log(logBase); logFreq = repmat(logFreq,size(spectra,1),1);
+        logF=log(spectra)/log(logBase);
         
         if (bNonlinearFit)
             options=fitoptions('power1','Robust','On');
@@ -224,16 +288,33 @@ freqBands = getFreqBandsFromData(data,parameters,a,b,c,chronuxParams);
             fitObj=fit(freq(:),spectra(:),'power1',options);
             c = fitObj.a;
             alpha = min(-fitObj.b,2);
-            logFreq=[]; logF=[]; 
         else
-            logFreq=log(freq)/log(logBase); logFreq = repmat(logFreq,size(spectra,1),1);
-            logF=log(spectra)/log(logBase);
             % % warnState=warning('off','stats:statrobustfit:IterationLimit');
-            b=robustfit(logFreq(:),logF(:));
+            B=robustfit(logFreq(:),logF(:));
             % % warning(warnState);
-            
-            c = b(1);
-            alpha = min(-b(2),2);
+            c = B(1);
+            alpha = min(-B(2),2);
         end
     end
+
+end
+
+function freqBands = unifyFreqBands(freqBands)
+if size(freqBands,1)>1
+[~,i] = sort(freqBands(:,1));
+freqBands = freqBands(i,:);
+counter = 1;
+while counter<size(freqBands,1)
+    if freqBands(counter+1,1)>freqBands(counter,2)
+        counter = counter+1;
+    else
+        toUnify = freqBands(:,1)<=freqBands(counter,2);
+        maxVal = max(freqBands(toUnify,2));
+        freqBands(counter,2) = maxVal;
+        toUnify(1:counter) = 0;
+        freqBands(toUnify,:) = [];
+    end
+end
+end
+
 end

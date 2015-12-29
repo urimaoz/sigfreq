@@ -68,7 +68,7 @@ p.bUnifyPosNeg = false; % If two clusters are adjacent and significant but have 
 p.nIter = 1000; % How many iterations of bootstrapping should be performed to identify significant clusters?
 p.bNonlinearRegression = true; % Use non-linear regression for the fit (true) or linear regression in log space (false), i.e., log-log fitting
 p.nSmoothingSpan = 0.1; % Smoothing span for the spectrum. If < 1 signifies ratio of data to use, if >1 signifies #samples to use
-
+p.topPercentile = 50; % What percent of trials should be used at a time in the iterative approach to find bands? Must be between 5 and 100. 100 indicates no iteration.
 p.plotDataAndSpectra = 1;
 p.plotFitOfSpectra = 1;
 p.plotNoiseSpectra = 1;
@@ -101,6 +101,7 @@ if nargin==0||~useDefaults
     p = updateP(p,'nIter','How many iterations of bootstrapping should be performed to identify significant clusters?');
     p = updateP(p,'bNonlinearRegression ','Use nonlinear regression (true) or linear regression in log space (false) to calculate alpha for 1/(f^alpha)?');
     p = updateP(p,'nSmoothingSpan ','What smoothing span to use for spectrum? Value < 1 signifies ratio of data to use, >1 signifies #samples to use');
+    p = updateP(p,'topPercentile','What percent of trials should be used at a time in the iterative approach to find bands? Must be between 5 and 100. 100 indicates no iteration.',@(x)x>=5 & x <=100);
 end
 
 p = parseParameters(p,varargin{:});
