@@ -118,7 +118,7 @@ data = transpose(data); %nTrials by nSamples
 
 logBase=2;
 [c,alpha,logF,logFreq] = getFit(freq,spectra,logBase,...
-    parameters.bNonlinearRegression);
+    parameters.bNonlinearRegression,1);
 
 
 if (parameters.plotFitOfSpectra)
@@ -233,9 +233,9 @@ freqBands = unifyFreqBands(freqBands);
             noiseSpectra = mtspectrumc(nz,cp);
             
             % scale the noise spectra to have power that matches the real data
-            [c2,~,logF,logFreq] = getFit(freq,noiseSpectra',logBase,...
-                parameters.bNonlinearRegression);
-            noiseSpectra = noiseSpectra*logBase^(c-c2);
+            [c2,c,logF,logFreq] = getFit(freq,noiseSpectra',logBase,...
+                parameters.bNonlinearRegression,1);
+%             noiseSpectra = noiseSpectra*logBase^(c-c2);
             if (parameters.normalizeSpectra)
                 integrals = sum(noiseSpectra);
                 noiseSpectra = noiseSpectra./repmat(integrals,size(noiseSpectra,1),1);
@@ -274,47 +274,53 @@ freqBands = unifyFreqBands(freqBands);
         
     end
 
-
-%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    function [c,alpha,logF,logFreq] = getFit(freq,spectra,logBase,...
-            bNonlinearFit)
-        
-        logFreq=log(freq)/log(logBase); logFreq = repmat(logFreq,size(spectra,1),1);
-        logF=log(spectra)/log(logBase);
-        
-        if (bNonlinearFit)
-            options=fitoptions('power1','Robust','On');
-            freq=repmat(freq,size(spectra,1),1);
-            fitObj=fit(freq(:),spectra(:),'power1',options);
-            c = fitObj.a;
-            alpha = min(-fitObj.b,2);
-        else
-            % % warnState=warning('off','stats:statrobustfit:IterationLimit');
-            B=robustfit(logFreq(:),logF(:));
-            % % warning(warnState);
-            c = B(1);
-            alpha = min(-B(2),2);
-        end
-    end
-
 end
+%~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+function [c,alpha,logF,logFreq] = getFit(freq,spectra,logBase,...
+    bNonlinearFit,giveWarning)
+
+logFreq=log(freq)/log(logBase); logFreq = repmat(logFreq,size(spectra,1),1);
+logF=log(spectra)/log(logBase);
+
+if (bNonlinearFit)
+    options=fitoptions('power1','Robust','On');
+    freq=repmat(freq,size(spectra,1),1);
+    fitObj=fit(freq(:),spectra(:),'power1',options);
+    c = fitObj.a;
+    alpha = -fitObj.b;
+else
+    % % warnState=warning('off','stats:statrobustfit:IterationLimit');
+    B=robustfit(logFreq(:),logF(:));
+    % % warning(warnState);
+    c = B(1);
+    alpha = -B(2);
+end
+if alpha>2
+    if giveWarning
+    warning(['Alpha was computed as ',num2str(alpha),'. If alpha is far from 2, the fitting will not be appropriate. Please check carefully']);
+    end
+    alpha = 2;
+end
+end
+
+
 
 function freqBands = unifyFreqBands(freqBands)
 if size(freqBands,1)>1
-[~,i] = sort(freqBands(:,1));
-freqBands = freqBands(i,:);
-counter = 1;
-while counter<size(freqBands,1)
-    if freqBands(counter+1,1)>freqBands(counter,2)
-        counter = counter+1;
-    else
-        toUnify = freqBands(:,1)<=freqBands(counter,2);
-        maxVal = max(freqBands(toUnify,2));
-        freqBands(counter,2) = maxVal;
-        toUnify(1:counter) = 0;
-        freqBands(toUnify,:) = [];
+    [~,i] = sort(freqBands(:,1));
+    freqBands = freqBands(i,:);
+    counter = 1;
+    while counter<size(freqBands,1)
+        if freqBands(counter+1,1)>freqBands(counter,2)
+            counter = counter+1;
+        else
+            toUnify = freqBands(:,1)<=freqBands(counter,2);
+            maxVal = max(freqBands(toUnify,2));
+            freqBands(counter,2) = maxVal;
+            toUnify(1:counter) = 0;
+            freqBands(toUnify,:) = [];
+        end
     end
-end
 end
 
 end
