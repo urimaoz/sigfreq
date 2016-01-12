@@ -1,6 +1,6 @@
 function [freqBands,parameters] = FindSignificantFrequencies(data,parameters)
 
-% SYNTAX: freqBands = findSignificantFrequencies(data,parameters)
+% SYNTAX: freqBands = FindSignificantFrequencies(data,parameters)
 %
 % Given 'data' (nTrials x nSamples) and parameters (optional), this
 % function calculates the frequency ranges in the data that differ
@@ -85,7 +85,19 @@ end
 
 [spectra,freq] = mtspectrumc(data,chronuxParams);
 
-%
+% Smooth the spectrum
+if (parameters.plotSpectraAndSmoothed)
+    spectraSmooth=SmoothSpectrum(spectra,parameters);
+%    [[We need to add plotting code here. But how do we decide which trials
+%    to plot? Do we get it as a parameter from the user? Do we plot the
+%    first 10 or so trials? Do we plot all the trials (risking having each
+%    subolot be very small)?]]
+    spectra=spectraSmooth;
+else
+    spectra=SmoothSpectrum(spectra,parameters);
+end
+
+% Plot data and spectra (optional)
 if (parameters.plotDataAndSpectra)
     if (parameters.normalizeSpectra)
         nSubplots = 3;
@@ -164,10 +176,18 @@ if parameters.topPercentile == 100
 else
     keepGoing = 1;
     freqBands = [];
-    runAtleastOnce = 0;
-    bestLogFitLine = c+logFreq(1,:)*(-alpha);
-    meanLogSpectra = mean(logF);
-    deviationBetween = meanLogSpectra - bestLogFitLine;
+%     runAtleastOnce = 0;
+    if parameters.bNonlinearRegression
+        bestFitLine = c*freq.^(-alpha);
+        deviationBetween = mean(spectra) - bestFitLine;
+    else
+        bestLogFitLine = c+logFreq(1,:)*(-alpha);
+        meanLogSpectra = mean(logF);
+        deviationBetween = meanLogSpectra - bestLogFitLine;
+    end
+    
+    
+    
 end
 
 while keepGoing
@@ -194,7 +214,7 @@ while keepGoing
         theseSpectra = spectra(trialsToKeep,:);
         theseFreqBands = getFreqBandsFromData(theseData,theseSpectra,parameters,a,b,c,chronuxParams);
         freqBands = [freqBands;theseFreqBands];
-        runAtleastOnce = 1;
+%         runAtleastOnce = 1;
         sigInds = false(size(freq));
         for tfb = 1:size(theseFreqBands)
             sigInds(freq>=theseFreqBands(tfb,1) & freq<=theseFreqBands(tfb,2)) = 1;
@@ -225,16 +245,17 @@ freqBands = unifyFreqBands(freqBands);
         end
         for n = parameters.nNoiseIterations:-1:1
             % a. Generate nTrials of noise that matches the power spectrum found in step 3.
-            nz =  ColoredNoise(alpha,nSamples,nTrials) * logBase^c;
+            nz =  ColoredNoise(min(alpha,2),nSamples,nTrials) * logBase^c;
             nzAmps = sum(abs(nz));
             dataAmps = sum(abs(data'));
             scaleFactor = repmat(dataAmps./nzAmps,nSamples,1);
             nz = nz.*scaleFactor;
             noiseSpectra = mtspectrumc(nz,cp);
-            
+            % Smooth noise spectra same as data spectra
+            noiseSpectra = SmoothSpectrum(noiseSpectra,parameters);
             % scale the noise spectra to have power that matches the real data
-            [c2,c,logF,logFreq] = getFit(freq,noiseSpectra',logBase,...
-                parameters.bNonlinearRegression,1);
+            [~,c,logF,logFreq] = getFit(freq,noiseSpectra',logBase,...
+                parameters.bNonlinearRegression,0);
 %             noiseSpectra = noiseSpectra*logBase^(c-c2);
             if (parameters.normalizeSpectra)
                 integrals = sum(noiseSpectra);
@@ -277,13 +298,17 @@ freqBands = unifyFreqBands(freqBands);
 end
 %~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 function [c,alpha,logF,logFreq] = getFit(freq,spectra,logBase,...
-    bNonlinearFit,giveWarning)
+    bNonlinearFit,dataNotNoise)
 
 logFreq=log(freq)/log(logBase); logFreq = repmat(logFreq,size(spectra,1),1);
 logF=log(spectra)/log(logBase);
 
 if (bNonlinearFit)
-    options=fitoptions('power1','Robust','On');
+    if dataNotNoise
+        options=fitoptions('power1','Robust','On');
+    else
+        options = fitoptions('power1','Robust','Off');
+    end
     freq=repmat(freq,size(spectra,1),1);
     fitObj=fit(freq(:),spectra(:),'power1',options);
     c = fitObj.a;
@@ -295,12 +320,19 @@ else
     c = B(1);
     alpha = -B(2);
 end
-if alpha>2
-    if giveWarning
-    warning(['Alpha was computed as ',num2str(alpha),'. If alpha is far from 2, the fitting will not be appropriate. Please check carefully']);
-    end
-    alpha = 2;
+
+
+if dataNotNoise
+    fprintf('Data; alpha = %0.3g\n',alpha)
+else
+    fprintf('Noise; alpha = %0.3g\n',alpha)
 end
+% if alpha>2
+% %     if giveWarning
+% %     warning(['Alpha was computed as ',num2str(alpha),'. If alpha is far from 2, the fitting will not be appropriate. Please check carefully']);
+% %     end
+%     alpha = 2;
+% end
 end
 
 
